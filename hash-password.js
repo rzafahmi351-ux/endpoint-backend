@@ -6,3 +6,5 @@ const bcrypt = require('bcryptjs');
     console.log('Password:', password);
     console.log('Hash:', hash);
 })();
+
+//hanya password dummy
