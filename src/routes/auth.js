@@ -6,7 +6,9 @@ const db = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 require('dotenv').config();
 
+// ==============================
 // POST /api/auth/login
+// ==============================
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -72,16 +74,21 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// ==============================
 // GET /api/auth/me
+// ==============================
 router.get('/me', authenticate, async (req, res) => {
     try {
         const [users] = await db.query(
-            'SELECT user_id, full_name, email, role FROM users WHERE user_id = ?',
+            'SELECT user_id, full_name, email, role, created_at FROM users WHERE user_id = ?',
             [req.user.user_id]
         );
 
         if (users.length === 0) {
-            return res.status(404).json({ success: false, error: 'User tidak ditemukan' });
+            return res.status(404).json({
+                success: false,
+                error: 'User tidak ditemukan'
+            });
         }
 
         res.status(200).json({ success: true, data: users[0] });
@@ -91,9 +98,72 @@ router.get('/me', authenticate, async (req, res) => {
     }
 });
 
+// ==============================
 // POST /api/auth/logout
+// ==============================
 router.post('/logout', authenticate, (req, res) => {
-    res.status(200).json({ success: true, message: 'Logout berhasil' });
+    res.status(200).json({
+        success: true,
+        message: 'Logout berhasil. Hapus token di client.'
+    });
+});
+
+// ==============================
+// POST /api/auth/change-password
+// ==============================
+router.post('/change-password', authenticate, async (req, res) => {
+    try {
+        const { old_password, new_password } = req.body;
+
+        if (!old_password || !new_password) {
+            return res.status(400).json({
+                success: false,
+                error: 'Password lama dan baru wajib diisi'
+            });
+        }
+
+        if (new_password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                error: 'Password baru minimal 6 karakter'
+            });
+        }
+
+        const [users] = await db.query(
+            'SELECT user_id, password_hash FROM users WHERE user_id = ?',
+            [req.user.user_id]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'User tidak ditemukan'
+            });
+        }
+
+        const isValid = await bcrypt.compare(old_password, users[0].password_hash);
+        if (!isValid) {
+            return res.status(400).json({
+                success: false,
+                error: 'Password lama salah'
+            });
+        }
+
+        const newHash = await bcrypt.hash(new_password, 10);
+
+        await db.query(
+            'UPDATE users SET password_hash = ? WHERE user_id = ?',
+            [newHash, req.user.user_id]
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Password berhasil diubah'
+        });
+    } catch (err) {
+        console.error('Change password error:', err);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
 });
 
 module.exports = router;
